@@ -17,6 +17,9 @@ from mmedit.datasets import build_dataset
 from mmedit.models import build_model
 from mmedit.utils import collect_env, get_root_logger, setup_multi_processes
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train an editor')

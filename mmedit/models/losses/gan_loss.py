@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.nn.functional import conv2d
 
 from ..registry import LOSSES
+autograd.set_detect_anomaly(True)
 
 
 @LOSSES.register_module()

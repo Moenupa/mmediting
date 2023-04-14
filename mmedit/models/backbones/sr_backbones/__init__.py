@@ -15,9 +15,10 @@ from .srcnn import SRCNN
 from .tdan_net import TDANNet
 from .tof import TOFlow
 from .ttsr_net import TTSRNet
+from .gan_basicvsr_net import GANBasicVSRNet
 
 __all__ = [
     'MSRResNet', 'RRDBNet', 'EDSR', 'EDVRNet', 'TOFlow', 'SRCNN', 'DICNet',
     'BasicVSRNet', 'IconVSR', 'RDN', 'TTSRNet', 'GLEANStyleGANv2', 'TDANNet',
-    'LIIFEDSR', 'LIIFRDN', 'BasicVSRPlusPlus', 'RealBasicVSRNet'
+    'LIIFEDSR', 'LIIFRDN', 'BasicVSRPlusPlus', 'RealBasicVSRNet', 'GANBasicVSRNet'
 ]

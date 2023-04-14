@@ -14,6 +14,9 @@ from mmedit.datasets import build_dataloader, build_dataset
 from mmedit.models import build_model
 from mmedit.utils import setup_multi_processes
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='mmediting tester')

@@ -179,6 +179,7 @@ class LoadImageFromFileList(LoadImageFromFile):
                     flag=self.flag,
                     channel_order=self.channel_order,
                     backend=self.backend)  # HWC
+                assert img is not None, f'Fail to read {filepath}'
 
             # convert to y-channel, if specified
             if self.convert_to is not None:

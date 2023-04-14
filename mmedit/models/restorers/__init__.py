@@ -11,8 +11,9 @@ from .real_esrgan import RealESRGAN
 from .srgan import SRGAN
 from .tdan import TDAN
 from .ttsr import TTSR
+from .gan_basicvsr import GANBasicVSR
 
 __all__ = [
     'BasicRestorer', 'SRGAN', 'ESRGAN', 'EDVR', 'LIIF', 'BasicVSR', 'TTSR',
-    'GLEAN', 'TDAN', 'DIC', 'RealESRGAN', 'RealBasicVSR'
+    'GLEAN', 'TDAN', 'DIC', 'RealESRGAN', 'RealBasicVSR', 'GANBasicVSR'
 ]

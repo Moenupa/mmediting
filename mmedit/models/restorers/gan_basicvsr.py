@@ -1,25 +1,19 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import numbers
-import os.path as osp
-from copy import deepcopy
-
-import mmcv
-import torch
+import torch.nn.functional as F
 from mmcv.parallel import is_module_wrapper
 
-from mmedit.core import tensor2img
+from ..builder import build_loss
 from ..common import set_requires_grad
 from ..registry import MODELS
-from .srgan import SRGAN
+from .real_esrgan import RealESRGAN
 
 
 @MODELS.register_module()
-class RealESRGAN(SRGAN):
-    """Real-ESRGAN model for single image super-resolution.
+class GANBasicVSR(RealESRGAN):
+    """GANBasicVSR model for real-world video super-resolution.
 
     Ref:
-    Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure
-    Synthetic Data, 2021.
+    Investigating Tradeoffs in Real-World Video Super-Resolution, arXiv
 
     Args:
         generator (dict): Config for the generator.
@@ -67,25 +61,10 @@ class RealESRGAN(SRGAN):
                  pretrained=None):
 
         super().__init__(generator, discriminator, gan_loss, pixel_loss,
-                         perceptual_loss, train_cfg, test_cfg, pretrained)
-
-        self.is_use_sharpened_gt_in_pixel = is_use_sharpened_gt_in_pixel
-        self.is_use_sharpened_gt_in_percep = is_use_sharpened_gt_in_percep
-        self.is_use_sharpened_gt_in_gan = is_use_sharpened_gt_in_gan
-
-        self.is_use_ema = is_use_ema
-        if is_use_ema:
-            self.generator_ema = deepcopy(self.generator)
-        else:
-            self.generator_ema = None
-
-        del self.step_counter
-        self.register_buffer('step_counter', torch.zeros(1))
-
-        if train_cfg is not None:  # used for initializing from ema model
-            self.start_iter = train_cfg.get('start_iter', -1)
-        else:
-            self.start_iter = -1
+                         perceptual_loss, is_use_sharpened_gt_in_pixel,
+                         is_use_sharpened_gt_in_percep,
+                         is_use_sharpened_gt_in_gan, is_use_ema, train_cfg,
+                         test_cfg, pretrained)
 
     def train_step(self, data_batch, optimizer):
         """Train step.
@@ -97,6 +76,7 @@ class RealESRGAN(SRGAN):
         Returns:
             dict: Returned output.
         """
+
         # during initialization, load weights from the ema model
         if (self.step_counter == self.start_iter
                 and self.generator_ema is not None):
@@ -111,20 +91,20 @@ class RealESRGAN(SRGAN):
         gt = data_batch['gt']
 
         gt_pixel, gt_percep, gt_gan = gt.clone(), gt.clone(), gt.clone()
-        if self.is_use_sharpened_gt_in_pixel:
-            gt_pixel = data_batch['gt_unsharp']
-        if self.is_use_sharpened_gt_in_percep:
-            gt_percep = data_batch['gt_unsharp']
-        if self.is_use_sharpened_gt_in_gan:
-            gt_gan = data_batch['gt_unsharp']
 
         # generator
-        fake_g_output = self.generator(lq)
-
+        fake_g_output, fake_g_lq = self.generator(lq, return_lqs=True)
         losses = dict()
         log_vars = dict()
 
-        # no updates to discriminator parameters.
+        # reshape: (n, t, c, h, w) -> (n*t, c, h, w)
+        c, h, w = gt.shape[2:]
+        gt_pixel = gt_pixel.view(-1, c, h, w)
+        gt_percep = gt_percep.view(-1, c, h, w)
+        gt_gan = gt_gan.view(-1, c, h, w)
+        fake_g_output = fake_g_output.view(-1, c, h, w)
+
+        # no updates to discriminator parameters
         if self.gan_loss:
             set_requires_grad(self.discriminator, False)
 
@@ -167,6 +147,7 @@ class RealESRGAN(SRGAN):
             optimizer['discriminator'].zero_grad()
             loss_d.backward()
             log_vars.update(log_vars_d)
+
             # fake
             fake_d_pred = self.discriminator(fake_g_output.detach())
             loss_d_fake = self.gan_loss(
@@ -187,54 +168,3 @@ class RealESRGAN(SRGAN):
             results=dict(lq=lq.cpu(), gt=gt.cpu(), output=fake_g_output.cpu()))
 
         return outputs
-
-    def forward_test(self,
-                     lq,
-                     gt=None,
-                     meta=None,
-                     save_image=False,
-                     save_path=None,
-                     iteration=None):
-        """Testing forward function.
-
-        Args:
-            lq (Tensor): LQ Tensor with shape (n, c, h, w).
-            gt (Tensor): GT Tensor with shape (n, c, h, w). Default: None.
-            save_image (bool): Whether to save image. Default: False.
-            save_path (str): Path to save image. Default: None.
-            iteration (int): Iteration for the saving image name.
-                Default: None.
-
-        Returns:
-            dict: Output results.
-        """
-        _model = self.generator_ema if self.is_use_ema else self.generator
-        output = _model(lq)
-
-        if self.test_cfg is not None and self.test_cfg.get(
-                'metrics', None) and gt is not None:
-            results = dict(eval_result=self.evaluate(output, gt))
-        else:
-            results = dict(lq=lq.cpu(), output=output.cpu())
-
-        # save image
-        if save_image:
-            lq_path = meta[0]['lq_path']
-            if type(lq_path) == list:
-                folder_name = osp.splitext(osp.basename(lq_path[0][:-13]))[0]
-            elif type(lq_path) == str:
-                folder_name = osp.splitext(osp.basename(lq_path))[0]
-            else:
-                folder_name = None
-            assert folder_name is not None, f'lq_path not parsed, {lq_path}'
-            if isinstance(iteration, numbers.Number):
-                save_path = osp.join(save_path, folder_name,
-                                     f'{folder_name}-{iteration + 1:06d}.png')
-            elif iteration is None:
-                save_path = osp.join(save_path, f'{folder_name}.png')
-            else:
-                raise ValueError('iteration should be number or None, '
-                                 f'but got {type(iteration)}')
-            mmcv.imwrite(tensor2img(output), save_path)
-
-        return results
