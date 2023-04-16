@@ -7,7 +7,7 @@ from mmedit.models.backbones.sr_backbones.basicvsr_net import (
     BasicVSRNet)
 from mmedit.models.registry import BACKBONES
 from mmedit.utils import get_root_logger
-from mmedit.models.restorers.srgan import SRGAN
+from mmedit.models.restorers import SRGAN, RealESRGAN
 
 
 @BACKBONES.register_module()
@@ -47,7 +47,7 @@ class GANBasicVSRNet(nn.Module):
             # print(f"loading {d.keys()}")
             # self.srgan.load_state_dict(torch.load(srgan_trained))
         if srgan_model is not None:
-            self.srgan = SRGAN(**srgan_model)
+            self.srgan = RealESRGAN(**srgan_model)
             _ = load_checkpoint(self.srgan, srgan_checkpoint, map_location='cpu')
         else:
             self.srgan = SRGAN(
